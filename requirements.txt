@@ -5,3 +5,4 @@ sqlalchemy==2.0.25
 asyncpg==0.29.0
 python-multipart==0.0.6
 pydantic[email]==2.5.3
+psycopg2-binary==2.9.9
