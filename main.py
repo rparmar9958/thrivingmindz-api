@@ -9,16 +9,11 @@ import secrets
 import json
 import databases
 
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:sbwhzgdXEfKWuuFvtgubRxnGXGhnKcWP@postgres.railway.internal:5432/railway")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-if not DATABASE_URL:
-    print("WARNING: DATABASE_URL not set")
-    DATABASE_URL = "sqlite:///./test.db"
-
 database = databases.Database(DATABASE_URL)
-
 app = FastAPI(title="ThrivingMindz API", version="1.0.0")
 
 app.add_middleware(
