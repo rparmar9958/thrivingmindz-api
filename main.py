@@ -14,6 +14,7 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 database = databases.Database(DATABASE_URL)
+
 app = FastAPI(title="ThrivingMindz API", version="1.0.0")
 
 app.add_middleware(
