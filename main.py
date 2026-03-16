@@ -105,6 +105,9 @@ async def health():
 
 @app.post("/api/register")
 async def create_registration(reg: RegistrationCreate):
+    existing = await database.fetch_one("SELECT id FROM registrations WHERE email = :email AND type = :type", {"email": reg.email, "type": reg.type})
+    if existing:
+        return {"success": True, "id": existing["id"], "message": "You're already registered! We'll be in touch soon."}
     query = """INSERT INTO registrations (created_at, type, status, name, email, phone, district, school, grade, interests, child_age, concern, discipline, license_num, specialty, pro_interest, role, school_interest, donor_type, donor_interest, notes)
     VALUES (:created_at, :type, :status, :name, :email, :phone, :district, :school, :grade, :interests, :child_age, :concern, :discipline, :license_num, :specialty, :pro_interest, :role, :school_interest, :donor_type, :donor_interest, :notes)
     RETURNING id"""
