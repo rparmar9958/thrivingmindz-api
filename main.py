@@ -58,6 +58,13 @@ class RegistrationCreate(BaseModel):
 class StatusUpdate(BaseModel):
     status: str
 
+class ContactCreate(BaseModel):
+    name: str
+    email: str
+    phone: Optional[str] = None
+    subject: Optional[str] = None
+    message: str
+
 @app.on_event("startup")
 async def startup():
     await database.connect()
@@ -87,6 +94,17 @@ async def startup():
             donor_interest VARCHAR(200),
             notes TEXT
         )""")
+        await database.execute(query="""
+        CREATE TABLE IF NOT EXISTS contacts (
+            id SERIAL PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT NOW(),
+            name VARCHAR(200),
+            email VARCHAR(200),
+            phone VARCHAR(30),
+            subject VARCHAR(200),
+            message TEXT,
+            status VARCHAR(20) DEFAULT 'new'
+        )""")
         print("Database connected and tables ready.")
     except Exception as e:
         print(f"Table creation note: {e}")
@@ -102,6 +120,20 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+@app.post("/api/contact")
+async def create_contact(contact: ContactCreate):
+    query = """INSERT INTO contacts (created_at, name, email, phone, subject, message, status)
+    VALUES (:created_at, :name, :email, :phone, :subject, :message, 'new')
+    RETURNING id"""
+    values = {"created_at": datetime.utcnow(), "name": contact.name, "email": contact.email, "phone": contact.phone, "subject": contact.subject, "message": contact.message}
+    record_id = await database.execute(query=query, values=values)
+    return {"success": True, "id": record_id, "message": "Message sent! We'll get back to you soon."}
+
+@app.get("/api/admin/contacts")
+async def get_contacts(admin: str = Depends(verify_admin)):
+    rows = await database.fetch_all("SELECT * FROM contacts ORDER BY created_at DESC")
+    return {"contacts": [{**dict(r), "created_at": str(r["created_at"])} for r in rows]}
 
 @app.post("/api/register")
 async def create_registration(reg: RegistrationCreate):
@@ -137,10 +169,12 @@ async def get_stats(admin: str = Depends(verify_admin)):
     month_ago = datetime.utcnow() - timedelta(days=30)
     daily = await database.fetch_all("SELECT DATE(created_at) as date, COUNT(*) as count FROM registrations WHERE created_at >= :date GROUP BY DATE(created_at) ORDER BY date", {"date": month_ago})
     by_district = await database.fetch_all("SELECT district, COUNT(*) as count FROM registrations WHERE district IS NOT NULL AND district != '' GROUP BY district ORDER BY count DESC")
+    contacts_count = await database.fetch_one("SELECT COUNT(*) as count FROM contacts")
     return {
         "total": total["count"] if total else 0,
         "this_week": this_week["count"] if this_week else 0,
         "today": today["count"] if today else 0,
+        "contacts": contacts_count["count"] if contacts_count else 0,
         "by_type": [dict(r) for r in by_type],
         "by_status": [dict(r) for r in by_status],
         "daily": [{"date": str(r["date"]), "count": r["count"]} for r in daily],
