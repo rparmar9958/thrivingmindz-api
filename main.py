@@ -8,6 +8,10 @@ import os
 import secrets
 import json
 import databases
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import asyncio
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:sbwhzgdXEfKWuuFvtgubRxnGXGhnKcWP@postgres.railway.internal:5432/railway")
 if DATABASE_URL.startswith("postgres://"):
@@ -27,12 +31,32 @@ app.add_middleware(
 
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "thrivingmindz2026")
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+NOTIFY_EMAIL = os.getenv("NOTIFY_EMAIL", "thrivingmindz@gmail.com")
 security = HTTPBasic()
 
 def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
     if not (secrets.compare_digest(credentials.username, ADMIN_USER) and secrets.compare_digest(credentials.password, ADMIN_PASS)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return credentials.username
+
+def send_email_notification(subject, body_html):
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        print("Email not configured, skipping notification")
+        return
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"ThrivingMindz <{SMTP_EMAIL}>"
+        msg["To"] = NOTIFY_EMAIL
+        msg.attach(MIMEText(body_html, "html"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.sendmail(SMTP_EMAIL, NOTIFY_EMAIL, msg.as_string())
+        print(f"Email sent: {subject}")
+    except Exception as e:
+        print(f"Email error: {e}")
 
 class RegistrationCreate(BaseModel):
     type: str
@@ -128,6 +152,20 @@ async def create_contact(contact: ContactCreate):
     RETURNING id"""
     values = {"created_at": datetime.utcnow(), "name": contact.name, "email": contact.email, "phone": contact.phone, "subject": contact.subject, "message": contact.message}
     record_id = await database.execute(query=query, values=values)
+    # Send email notification
+    asyncio.get_event_loop().run_in_executor(None, send_email_notification,
+        f"📩 New Contact Message from {contact.name}",
+        f"""<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+        <h2 style="color:#FF6B9D;">New Contact Message</h2>
+        <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Name:</td><td style="padding:8px;">{contact.name}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Email:</td><td style="padding:8px;"><a href="mailto:{contact.email}">{contact.email}</a></td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Phone:</td><td style="padding:8px;">{contact.phone or 'N/A'}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Type:</td><td style="padding:8px;">{contact.subject or 'N/A'}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Message:</td><td style="padding:8px;">{contact.message}</td></tr>
+        </table>
+        <p style="margin-top:20px;color:#888;font-size:12px;">View all contacts at <a href="https://thrivingmindz.org/admin">thrivingmindz.org/admin</a></p>
+        </div>""")
     return {"success": True, "id": record_id, "message": "Message sent! We'll get back to you soon."}
 
 @app.get("/api/admin/contacts")
@@ -155,6 +193,21 @@ async def create_registration(reg: RegistrationCreate):
         "donor_type": reg.donor_type, "donor_interest": reg.donor_interest, "notes": reg.notes,
     }
     record_id = await database.execute(query=query, values=values)
+    # Send email notification
+    asyncio.get_event_loop().run_in_executor(None, send_email_notification,
+        f"🎉 New {reg.type.title()} Registration: {reg.name}",
+        f"""<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+        <h2 style="color:#FF6B9D;">New Registration!</h2>
+        <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Type:</td><td style="padding:8px;"><span style="background:#FF6B9D22;color:#FF6B9D;padding:4px 12px;border-radius:12px;font-weight:bold;">{reg.type}</span></td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Name:</td><td style="padding:8px;">{reg.name}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Email:</td><td style="padding:8px;"><a href="mailto:{reg.email}">{reg.email}</a></td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">Phone:</td><td style="padding:8px;">{reg.phone or 'N/A'}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">District:</td><td style="padding:8px;">{reg.district or 'N/A'}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;color:#555;">School:</td><td style="padding:8px;">{reg.school or 'N/A'}</td></tr>
+        </table>
+        <p style="margin-top:20px;color:#888;font-size:12px;">View all registrations at <a href="https://thrivingmindz.org/admin">thrivingmindz.org/admin</a></p>
+        </div>""")
     return {"success": True, "id": record_id, "message": "Registration received!"}
 
 @app.get("/api/admin/stats")
